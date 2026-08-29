@@ -1,14 +1,12 @@
 import { createTRPCRouter } from "@/server/api/trpc";
-import { hooksRouter } from "@/server/api/routers/hooks";
-import { notificationsRouter } from "@/server/api/routers/notifications";
 import { configRouter } from "@/server/api/routers/config";
-import { systemSoundsRouter } from "@/server/api/routers/systemSounds";
+import { soundsRouter } from "@/server/api/routers/sounds";
+import { projectsRouter } from "@/server/api/routers/projects";
 
 export const appRouter = createTRPCRouter({
-  hooks: hooksRouter,
-  notifications: notificationsRouter,
   config: configRouter,
-  systemSounds: systemSoundsRouter,
+  sounds: soundsRouter,
+  projects: projectsRouter,
 });
 
 export type AppRouter = typeof appRouter;

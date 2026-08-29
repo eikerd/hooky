@@ -1,16 +1,14 @@
-export type HookEventType =
-  | "SessionStart"
-  | "UserPromptSubmit"
-  | "PreToolUse"
-  | "PermissionRequest"
-  | "PostToolUse"
-  | "PostToolUseFailure"
-  | "Notification"
-  | "SubagentStart"
-  | "SubagentStop"
-  | "Stop"
-  | "PreCompact"
-  | "SessionEnd";
+/**
+ * Shapes for Claude Code's settings.json `hooks` block.
+ *
+ * HookEventType lives in soundEvents.ts so the event catalog has exactly one
+ * definition -- it used to be declared here *and* in constants.ts *and* in
+ * validation.ts, which is how the list drifted out of sync in the first place.
+ */
+export type { HookEventType } from "./soundEvents";
+export { HOOK_EVENTS_ORDERED, EVENT_META } from "./soundEvents";
+
+import type { HookEventType } from "./soundEvents";
 
 export type HookHandlerType = "command" | "prompt" | "agent";
 
@@ -32,23 +30,19 @@ export interface HookGroup {
 
 export type HooksConfig = Partial<Record<HookEventType, HookGroup[]>>;
 
+/**
+ * Deliberately open-ended: settings.json holds many keys Hooky doesn't model
+ * (env, statusLine, enabledPlugins, tui...) and they must survive a write.
+ * See the note in utils/validation.ts.
+ */
 export interface ClaudeSettings {
-  permissions?: { allow: string[] };
+  permissions?: {
+    allow?: string[];
+    deny?: string[];
+    ask?: string[];
+    [key: string]: unknown;
+  };
   model?: string;
   hooks?: HooksConfig;
+  [key: string]: unknown;
 }
-
-export const HOOK_EVENTS: Record<HookEventType, string> = {
-  SessionStart: "Session Started",
-  UserPromptSubmit: "User Prompt Submitted",
-  PreToolUse: "Before Tool Execution",
-  PermissionRequest: "Permission Requested",
-  PostToolUse: "After Tool Execution",
-  PostToolUseFailure: "Tool Execution Failed",
-  Notification: "Notification",
-  SubagentStart: "Subagent Started",
-  SubagentStop: "Subagent Stopped",
-  Stop: "Session Stopped",
-  PreCompact: "Before Compaction",
-  SessionEnd: "Session Ended",
-};

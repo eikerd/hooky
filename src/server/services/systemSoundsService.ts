@@ -1,182 +1,145 @@
-import { exec } from "child_process";
+import { execFile, spawn, type ChildProcess } from "child_process";
 import { promisify } from "util";
 import { platform } from "os";
-import { existsSync } from "fs";
+import fs from "fs/promises";
+import path from "path";
+import { SOUND_DIRS, SOUND_EXTENSIONS } from "@/utils/constants";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface SystemSound {
   name: string;
   path: string;
-  durationMicroseconds: number;
+  /** Seconds. 0 when afinfo couldn't determine it. */
+  duration: number;
+  /** Which directory it came from, for grouping in the UI. */
+  source: "System" | "Local" | "User" | "Custom";
 }
 
+const SOURCE_LABELS: Array<SystemSound["source"]> = ["System", "Local", "User", "Custom"];
+
 class SystemSoundsService {
-  async listSystemSounds(): Promise<SystemSound[]> {
-    const currentPlatform = platform();
+  /** In-process cache: the sound library changes rarely, but the UI polls it. */
+  private cache: { at: number; sounds: SystemSound[] } | null = null;
+  private static readonly CACHE_MS = 30_000;
 
-    if (currentPlatform === "darwin") {
-      return this.listMacOSSounds();
-    } else if (currentPlatform === "win32") {
-      return this.listWindowsSounds();
+  /** The preview currently playing, so a new one can interrupt it. */
+  private current: ChildProcess | null = null;
+
+  async list(force = false): Promise<SystemSound[]> {
+    if (platform() !== "darwin") return [];
+
+    if (!force && this.cache && Date.now() - this.cache.at < SystemSoundsService.CACHE_MS) {
+      return this.cache.sounds;
     }
 
-    return [];
-  }
+    const found: SystemSound[] = [];
 
-  private async listMacOSSounds(): Promise<SystemSound[]> {
-    try {
-      const soundDirs = [
-        "/System/Library/Sounds",
-        "/Library/Sounds",
-        `${process.env.HOME}/Library/Sounds`,
-      ];
-
-      const allSounds: SystemSound[] = [];
-
-      for (const dir of soundDirs) {
-        try {
-          const { stdout } = await execAsync(`find "${dir}" -name "*.aiff" -o -name "*.wav" -o -name "*.m4a" 2>/dev/null`);
-          const files = stdout.trim().split("\n").filter(f => f);
-
-          for (const file of files) {
-            if (!file) continue;
-
-            try {
-              // Get duration using afinfo (macOS)
-              const { stdout: afinfo } = await execAsync(`afinfo "${file}" 2>/dev/null | grep "duration:"`, {
-                shell: "/bin/bash",
-              });
-
-              const durationMatch = afinfo.match(/duration:\s+([\d.]+)\s+sec/);
-              const durationSeconds = durationMatch ? parseFloat(durationMatch[1]) : 0;
-              const durationMicroseconds = Math.round(durationSeconds * 1_000_000);
-
-              const name = file.split("/").pop()?.replace(/\.(aiff|wav|m4a)$/i, "") || "";
-
-              if (name && durationMicroseconds > 0) {
-                allSounds.push({
-                  name,
-                  path: file,
-                  durationMicroseconds,
-                });
-              }
-            } catch (err) {
-              continue;
-            }
-          }
-        } catch (err) {
-          continue;
-        }
+    for (const [index, dir] of SOUND_DIRS.entries()) {
+      let entries: string[];
+      try {
+        entries = await fs.readdir(dir);
+      } catch {
+        continue; // Directory doesn't exist; that's normal for the optional ones.
       }
 
-      // Remove duplicates by name
-      const seen = new Set<string>();
-      const unique = allSounds.filter(sound => {
+      const audioFiles = entries.filter((file) =>
+        SOUND_EXTENSIONS.includes(path.extname(file).toLowerCase())
+      );
+
+      // afinfo is one process per file, so fan them out rather than awaiting
+      // each in turn -- serially this took ~14 round trips just to draw a list.
+      const durations = await Promise.all(
+        audioFiles.map((file) => this.duration(path.join(dir, file)))
+      );
+
+      audioFiles.forEach((file, i) => {
+        found.push({
+          name: path.basename(file, path.extname(file)),
+          path: path.join(dir, file),
+          duration: durations[i],
+          source: SOURCE_LABELS[index] ?? "Custom",
+        });
+      });
+    }
+
+    // Earlier directories win on name collision (System before User).
+    const seen = new Set<string>();
+    const sounds = found
+      .filter((sound) => {
         if (seen.has(sound.name)) return false;
         seen.add(sound.name);
         return true;
-      });
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
-      return unique.sort((a, b) => a.name.localeCompare(b.name));
-    } catch (error) {
-      console.error("Error listing macOS sounds:", error);
-      return [];
-    }
+    this.cache = { at: Date.now(), sounds };
+    return sounds;
   }
 
-  private async listWindowsSounds(): Promise<SystemSound[]> {
+  private async duration(filePath: string): Promise<number> {
     try {
-      const soundDirs = [
-        "C:\\Windows\\Media",
-        "C:\\Windows\\Media\\tada",
-      ];
+      const { stdout } = await execFileAsync("afinfo", [filePath], { timeout: 5000 });
+      const match = stdout.match(/estimated duration:\s+([\d.]+)\s*sec/i);
+      return match ? parseFloat(match[1]) : 0;
+    } catch {
+      return 0;
+    }
+  }
 
-      const allSounds: SystemSound[] = [];
+  /**
+   * Preview a sound through the same path the hook uses, so what you hear in
+   * the UI is exactly what you'll hear at fire time (including volume).
+   *
+   * execFile, not exec: the path goes straight to argv with no shell, so
+   * filenames with spaces or quotes can't break out into a command.
+   */
+  async play(soundPath: string, volume = 1): Promise<void> {
+    if (platform() !== "darwin") {
+      throw new Error("Sound preview is macOS-only.");
+    }
 
-      for (const dir of soundDirs) {
-        try {
-          // Use PowerShell to list sound files
-          const { stdout } = await execAsync(
-            `powershell -NoProfile -Command "Get-ChildItem -Path '${dir}' -Include *.wav,*.mp3 -ErrorAction SilentlyContinue | ForEach-Object { Write-Output $_.FullName }"`,
-            { shell: "powershell.exe" }
-          );
-
-          const files = stdout.trim().split("\n").filter(f => f && f.trim());
-
-          for (const file of files) {
-            if (!file || !file.trim()) continue;
-
-            try {
-              // For Windows, try to get duration using a PowerShell method
-              const fileName = file.split("\\").pop()?.replace(/\.(wav|mp3)$/i, "") || "";
-
-              // Estimate duration for Windows - we'll use file properties
-              // For now, use a default estimate
-              const durationMicroseconds = 2_000_000; // Default 2 seconds for demo
-
-              if (fileName) {
-                allSounds.push({
-                  name: fileName,
-                  path: file.trim(),
-                  durationMicroseconds,
-                });
-              }
-            } catch (err) {
-              continue;
-            }
-          }
-        } catch (err) {
-          continue;
-        }
+    const sounds = await this.list();
+    const known = sounds.some((sound) => sound.path === soundPath);
+    if (!known) {
+      // Allow arbitrary files, but confirm they exist and look like audio.
+      if (!SOUND_EXTENSIONS.includes(path.extname(soundPath).toLowerCase())) {
+        throw new Error("Not a recognized audio file.");
       }
+      await fs.access(soundPath);
+    }
 
-      // Remove duplicates by name
-      const seen = new Set<string>();
-      const unique = allSounds.filter(sound => {
-        if (seen.has(sound.name)) return false;
-        seen.add(sound.name);
-        return true;
+    // Cancel whatever is still playing. Clicking through the dropdown fires a
+    // preview per selection, and without this they stack into overlapping
+    // afplay processes instead of letting you audition sounds one at a time.
+    this.stopPreview();
+
+    const clamped = Math.max(0, Math.min(2, volume));
+
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn("afplay", ["-v", String(clamped), soundPath]);
+      this.current = child;
+
+      const done = () => {
+        if (this.current === child) this.current = null;
+      };
+
+      child.on("error", (error) => {
+        done();
+        reject(error);
       });
-
-      return unique.sort((a, b) => a.name.localeCompare(b.name));
-    } catch (error) {
-      console.error("Error listing Windows sounds:", error);
-      return [];
-    }
+      child.on("close", () => {
+        done();
+        resolve(); // A killed preview is a normal outcome, not a failure.
+      });
+    });
   }
 
-  async playSystemSound(soundPath: string): Promise<void> {
-    const currentPlatform = platform();
-
-    try {
-      if (currentPlatform === "darwin") {
-        await execAsync(`afplay "${soundPath}"`);
-      } else if (currentPlatform === "win32") {
-        // Use PowerShell to play sound on Windows
-        const escapedPath = soundPath.replace(/"/g, '\\"');
-        await execAsync(
-          `powershell -NoProfile -Command "[System.Media.SoundPlayer]::new(\\'${soundPath}\\').PlaySync()"`,
-          { shell: "powershell.exe" }
-        );
-      } else {
-        throw new Error("System sounds are not supported on this platform");
-      }
-    } catch (error) {
-      console.error("Error playing sound:", error);
-      throw new Error("Failed to play system sound");
+  stopPreview(): void {
+    if (this.current && !this.current.killed) {
+      this.current.kill("SIGTERM");
     }
-  }
-
-  formatDuration(microseconds: number): string {
-    const seconds = microseconds / 1_000_000;
-    const minutes = Math.floor(seconds / 60);
-    const secs = (seconds % 60).toFixed(2);
-
-    if (minutes > 0) {
-      return `${minutes}:${parseInt(secs).toString().padStart(2, "0")}`;
-    }
-    return `${secs}s`;
+    this.current = null;
   }
 }
 

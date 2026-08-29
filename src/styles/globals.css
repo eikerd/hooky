@@ -28,6 +28,20 @@
     border-color: hsl(var(--border));
   }
 
+  /*
+   * Tailwind sizes everything in rem, so the whole UI -- text, padding, gaps,
+   * control heights -- scales from this one number. Dropping the root from the
+   * browser default 16px to 14px shrinks the entire app by 12.5% without
+   * touching a single utility class, which is why the density work lives here
+   * rather than in 40 component files.
+   *
+   * Explicit px sizes (text-[11px] and friends) deliberately do NOT scale: the
+   * smallest labels are already at the legibility floor.
+   */
+  html {
+    font-size: 14px;
+  }
+
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
@@ -37,7 +51,7 @@
 
   /* Smooth scrollbar */
   ::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
     height: 8px;
   }
 

@@ -44,3 +44,13 @@ yarn-error.log*
 
 # bun
 bun.lockb
+
+# python venv (checked in by accident; 50MB of site-packages)
+.venv/
+__pycache__/
+
+# playwright MCP scratch output
+/.playwright-mcp/
+
+# build info
+tsconfig.tsbuildinfo

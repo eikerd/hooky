@@ -1,8 +1,8 @@
 {
-  "name": "claude-hooks",
+  "name": "hooky",
   "version": "1.0.0",
   "type": "module",
-  "description": "GUI Manager for Claude Code Hooks with Notification Customizer",
+  "description": "macOS GUI for customizing the sound Claude Code plays on each hook event",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
