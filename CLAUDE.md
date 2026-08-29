@@ -6,9 +6,11 @@ does for users; this file covers what will bite you while changing it.
 
 Read `README.md` first for the feature model — it is accurate and current.
 
-**Working on Windows, WSL or Cowork support? Read `docs/PORTING.md` first.** It
-carries the platform inventory, the WSL audio/banner plan, and the finding that
-Cowork fires no hooks at all and needs a different event source entirely. Every
+**New to this repo, or working on Windows / WSL / Cowork? Read
+`docs/START-HERE.md` first** — the mission, who the users are, how to boot the
+app, and the first three things to verify. Then `docs/PORTING.md` for the
+platform inventory, the WSL audio/banner plan, and the finding that Cowork
+fires no hooks at all and needs a different event source entirely. Every
 invariant below still applies there.
 
 ## The one thing to understand first

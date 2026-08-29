@@ -8,8 +8,9 @@ it a title and some links, and see that footer under every reply. Hooky writes
 the config and wires it into `~/.claude/settings.json` for you.
 
 > **Platform status:** macOS is done and tested. Windows (WSL 2 + Claude Code,
-> and the Cowork desktop app) is in progress — see [`docs/PORTING.md`](docs/PORTING.md)
-> for the plan and what already turned out to be true.
+> and the Cowork desktop app) is in progress. Picking this up on a new machine?
+> Start with [`docs/START-HERE.md`](docs/START-HERE.md), then
+> [`docs/PORTING.md`](docs/PORTING.md).
 
 ## Requirements
 
