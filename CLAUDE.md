@@ -6,6 +6,11 @@ does for users; this file covers what will bite you while changing it.
 
 Read `README.md` first for the feature model — it is accurate and current.
 
+**Working on Windows, WSL or Cowork support? Read `docs/PORTING.md` first.** It
+carries the platform inventory, the WSL audio/banner plan, and the finding that
+Cowork fires no hooks at all and needs a different event source entirely. Every
+invariant below still applies there.
+
 ## The one thing to understand first
 
 Everything Hooky writes runs **on Claude Code's critical path**, in the user's

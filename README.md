@@ -7,6 +7,10 @@ Pick an event, pick a sound, hear it instantly, save. Register a project, give
 it a title and some links, and see that footer under every reply. Hooky writes
 the config and wires it into `~/.claude/settings.json` for you.
 
+> **Platform status:** macOS is done and tested. Windows (WSL 2 + Claude Code,
+> and the Cowork desktop app) is in progress — see [`docs/PORTING.md`](docs/PORTING.md)
+> for the plan and what already turned out to be true.
+
 ## Requirements
 
 - macOS
